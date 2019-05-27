@@ -58,7 +58,7 @@ var XSS = (() => {
       data = [];
     } catch (e) {
       error(e, "XSS filter processing %o", xssReq);
-      if (e instanceof TimingException) {
+      if (e instanceof TimingException && !/\btimeout\b/i.test(e.message)) {
         // we don't want prompts if the request expired / errored first
         return;
       }
@@ -252,25 +252,11 @@ var XSS = (() => {
 
       let {destUrl} = xssReq;
 
-      await include("/xss/InjectionChecker.js");
-      let ic = new (await this.InjectionChecker)();
-      let {timing} = ic;
-      timingsMap.set(request.id, timing);
-
-      let postInjection = xssReq.isPost &&
-          request.requestBody && request.requestBody.formData &&
-          await ic.checkPost(request.requestBody.formData, skipParams);
-
-      if (timing.tooLong) {
-        log("[XSS] Long check (%s ms) - %s", timing.elapsed, JSON.stringify(xssReq));
-      }
-
-      let protectName = ic.nameAssignment;
-      let urlInjection = await ic.checkUrl(destUrl, skipRx);
-      protectName = protectName || ic.nameAssignment;
-
-      return !(protectName || postInjection || urlInjection) ? null
-        : { protectName, postInjection, urlInjection };
+      let worker = new Worker("InjectionCheckWorker.js");
+      return await new Promise(resolve => {
+        worker.onmessage = e => resolve(e.data);
+        worker.postMessage(xssReq);
+      });
     }
   };
 })();

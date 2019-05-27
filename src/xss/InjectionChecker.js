@@ -172,7 +172,7 @@ XSS.InjectionChecker = (async () => {
       const toStringRx = /^function\s*toString\(\)\s*{\s*\[native code\]\s*\}$/;
 
       // optimistic case first, one big JSON block
-      let m = s.match(/{[^]+}|\[\s*{[^]+}\s*\]/);
+      let m = s.match(/{[^]+}|\[[^]*{[^]*}[^]*\]/);
       if (!m) return s;
 
       // semicolon-separated JSON chunks, like on syndication.twitter.com
