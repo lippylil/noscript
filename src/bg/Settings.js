@@ -83,7 +83,7 @@ var Settings = {
       reloadAffected,
       isTorBrowser,
     } = settings;
-
+    debug("Received settings ", settings);
     let oldDebug = ns.local.debug;
 
     let reloadOptionsUI = false;
@@ -92,6 +92,8 @@ var Settings = {
       // Tor Browser-specific settings
       ns.defaults.local.isTorBrowser = true; // prevents reset from forgetting
       ns.defaults.sync.cascadeRestrictions = true; // we want this to be the default even on reset
+      Sites.onionSecure = true;
+
       if (!this.gotTorBrowserInit) {
         // First initialization message from the Tor Browser
         this.gotTorBrowserInit = true;
@@ -169,11 +171,6 @@ var Settings = {
       sync: ns.sync,
       xssUserChoices: XSS.getUserChoices(),
     }, null, 2);
-  },
-
-  async enforceTabRestrictions(tabId, unrestricted = ns.unrestrictedTabs.has(tabId)) {
-    await ChildPolicies.storeTabInfo(tabId, unrestricted && {unrestricted: true});
-    return unrestricted;
   },
 
   async reloadOptionsUI() {

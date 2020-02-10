@@ -1,6 +1,16 @@
 'use strict';
 // debug = () => {}; // REL_ONLY
-var _ = browser.i18n.getMessage;
+function _(...args) {
+  let fakeLang = navigator.language === "en-US" &&
+                  browser.i18n.getUILanguage() !== "en-US";
+  return (_ = (template, ...substitutions) => {
+        let [key, defTemplate] = template.split("|");
+        return fakeLang
+          ? (defTemplate || key).replace(/\$([1-9])/g,
+              (m, p) => substitutions[parseInt(p) - 1] || "$" + p)
+          : browser.i18n.getMessage(template, ...substitutions);
+      })(...args);
+}
 
 function createHTMLElement(name) {
   return document.createElementNS("http://www.w3.org/1999/xhtml", name);
@@ -22,7 +32,19 @@ var seen = {
 
 Messages.addHandler({
   seen(event) {
-    let {allowed, policyType, request, ownFrame} = event;
+    let {allowed, policyType, request, ownFrame, serviceWorker} = event;
+    if (serviceWorker) {
+      for (let e of seen.list) {
+        let {request} = e;
+        if (e.serviceWorker === serviceWorker ||
+            (request.type === "main_frame" || request.type === "sub_frame") &&
+             new URL(request.url).origin === serviceWorker) {
+          seen.record(event);
+          break;
+        }
+      }
+      return;
+    }
     if (window.top === window) {
       seen.record(event);
     }
@@ -48,23 +70,17 @@ var notifyPage = async () => {
   debug("Page %s shown, %s", document.URL, document.readyState);
   if (document.readyState === "complete") {
     try {
-      if (!("canScript" in ns)) {
-        ns.fetchPolicy();
-        return;
-      }
       await Messages.send("pageshow", {seen: seen.list, canScript: ns.canScript});
       return true;
     } catch (e) {
       debug(e);
-      if (/Receiving end does not exist/.test(e.message)) {
+      if (Messages.isMissingEndpoint(e)) {
         window.setTimeout(notifyPage, 2000);
       }
     }
   }
   return false;
 }
-
-notifyPage();
 
 window.addEventListener("pageshow", notifyPage);
 
@@ -95,3 +111,6 @@ ns.on("capabilities", () => {
 
   notifyPage();
 });
+
+ns.fetchPolicy();
+notifyPage();

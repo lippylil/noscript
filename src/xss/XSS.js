@@ -4,8 +4,8 @@ var XSS = (() => {
 
   const ABORT = {cancel: true}, ALLOW = {};
 
+  let workersMap = new Map();
   let promptsMap = new Map();
-  let timingsMap = new Map();
 
   async function getUserResponse(xssReq) {
     let {originKey} = xssReq;
@@ -23,10 +23,11 @@ var XSS = (() => {
   }
 
   function doneListener(request) {
-    let timing = timingsMap.get(request.id);
-    if (timing) {
-      timing.interrupted = true;
-      timingsMap.delete(request.id);
+    let {requestId} = request;
+    let worker = workersMap.get(requestId);
+    if (worker) {
+      worker.terminate();
+      workersMap.delete(requestId);
     }
   }
 
@@ -58,9 +59,9 @@ var XSS = (() => {
       data = [];
     } catch (e) {
       error(e, "XSS filter processing %o", xssReq);
-      if (e instanceof TimingException && !/\btimeout\b/i.test(e.message)) {
+      if (/^Timing:/.test(e.message)  && !/\btimeout\b/i.test(e.message)) {
         // we don't want prompts if the request expired / errored first
-        return;
+        return ABORT;
       }
       reasons = { urlInjection: true };
       data = [e.toString()];
@@ -125,6 +126,21 @@ var XSS = (() => {
     }
   };
 
+  function parseUrl(url) {
+    let u = new URL(url);
+    // make it cloneable
+    return {
+      href: u.href,
+      protocol: u.protocol,
+      hostname: u.hostname,
+      port: u.port,
+      origin: u.origin,
+      pathname: u.pathname,
+      search: u.search,
+      hash: u.hash,
+    };
+  }
+
   return {
     async start() {
       if (!UA.isMozilla) return; // async webRequest is supported on Mozilla only
@@ -166,7 +182,6 @@ var XSS = (() => {
       }
     },
 
-
     parseRequest(request) {
       let {
         url: destUrl,
@@ -175,7 +190,7 @@ var XSS = (() => {
       } = request;
       let destObj;
       try {
-        destObj = new URL(destUrl);
+        destObj = parseUrl(destUrl);
       } catch (e) {
         error(e, "Cannot create URL object for %s", destUrl);
         return null;
@@ -183,7 +198,7 @@ var XSS = (() => {
       let srcObj = null;
       if (srcUrl) {
         try {
-          srcObj = new URL(srcUrl);
+          srcObj = parseUrl(srcUrl);
         } catch (e) {}
       } else {
         srcUrl = "";
@@ -198,28 +213,20 @@ var XSS = (() => {
 
       let isGet = method === "GET";
       return {
-        xssUnparsed: request,
+        unparsedRequest: request,
         srcUrl,
         destUrl,
         srcObj,
         destObj,
         srcOrigin,
         destOrigin,
-        get srcDomain() {
-          delete this.srcDomain;
-          return this.srcDomain = srcObj && srcObj.hostname && tld.getDomain(srcObj.hostname) || "";
-        },
-        get destDomain() {
-          delete this.destDomain;
-          return this.destDomain = tld.getDomain(destObj.hostname);
-        },
-        get originKey() {
-          delete this.originKey;
-          return this.originKey = `${srcOrigin}>${destOrigin}`;
-        },
+        srcDomain: srcObj && srcObj.hostname && tld.getDomain(srcObj.hostname) || "",
+        destDomain: tld.getDomain(destObj.hostname),
+        originKey: `${srcOrigin}>${destOrigin}`,
         unescapedDest,
         isGet,
         isPost: !isGet && method === "POST",
+        timestamp: Date.now(),
       }
     },
 
@@ -237,25 +244,45 @@ var XSS = (() => {
       return this._userChoices[originKey];
     },
 
-    async maybe(request) { // return reason or null if everything seems fine
-      let xssReq = request.xssUnparsed ? request : this.parseRequest(request);
-      request = xssReq.xssUnparsed;
-
+    async maybe(xssReq) { // return reason or null if everything seems fine
       if (await this.Exceptions.shouldIgnore(xssReq)) {
         return null;
       }
 
-      let {
-        skipParams,
-        skipRx
-      } = this.Exceptions.partial(xssReq);
-
-      let {destUrl} = xssReq;
-
-      let worker = new Worker("InjectionCheckWorker.js");
-      return await new Promise(resolve => {
-        worker.onmessage = e => resolve(e.data);
-        worker.postMessage(xssReq);
+      let skip = this.Exceptions.partial(xssReq);
+      let worker = new Worker(browser.runtime.getURL("/xss/InjectionCheckWorker.js"));
+      let {requestId} = xssReq.unparsedRequest;
+      workersMap.set(requestId, worker)
+      return await new Promise((resolve, reject) => {
+        let cleanup = () => {
+          workersMap.delete(requestId);
+          worker.terminate();
+        };
+        worker.onmessage = e => {
+          let {data} = e;
+          if (data) {
+            if (data.logType) {
+              window[data.logType](...data.log);
+              return;
+            }
+            if (data.error) {
+              reject(data.error);
+              cleanup();
+              return;
+            }
+          }
+          resolve(e.data);
+          cleanup();
+        }
+        worker.onerror = worker.onmessageerror = e => {
+          reject(e);
+          cleanup();
+        }
+        worker.postMessage({handler: "check", xssReq, skip});
+        setTimeout(() => {
+          reject(new Error("Timeout! DOS attack attempt?"));
+          cleanup();
+        }, 20000)
       });
     }
   };

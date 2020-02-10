@@ -1,6 +1,7 @@
 debug("Initializing InjectionChecker");
 XSS.InjectionChecker = (async () => {
   await include([
+    "/common/SyntaxChecker.js",
     "/lib/Base64.js",
     "/lib/Timing.js",
     "/xss/FlashIdiocy.js",
@@ -20,7 +21,7 @@ XSS.InjectionChecker = (async () => {
   const IC_EVAL_PATTERN = "\\b(?:" +
     fuzzify('eval|import|set(?:Timeout|Interval)|(?:f|F)unction|Script|toString|Worker|document|constructor|generateCRMFRequest|jQuery|fetch|write(?:ln)?|__(?:define(?:S|G)etter|noSuchMethod)__|definePropert(?:y|ies)') +
     "|\\$|" + IC_WINDOW_OPENER_PATTERN + ")\\b";
-  const IC_EVENT_PATTERN = "on(?:m(?:o(?:z(?:browser(?:beforekey(?:down|up)|afterkey(?:down|up))|(?:network(?:down|up)loa|accesskeynotfoun)d|pointerlock(?:change|error)|(?:orientation|time)change|fullscreen(?:change|error)|visual(?:resize|scroll)|interrupt(?:begin|end)|key(?:down|up)onplugin)|use(?:l(?:ongtap|eave)|o(?:ver|ut)|enter|wheel|down|move|up))|a(?:p(?:se(?:tmessagestatus|ndmessage)|message(?:slisting|update)|folderlisting|getmessage)req|rk)|e(?:rchantvalidation|ssage(?:error)?)|(?:idimessag|ut)e)|p(?:o(?:inter(?:l(?:ock(?:change|error)|eave)|o(?:ver|ut)|cancel|enter|down|move|up)|p(?:up(?:hid(?:den|ing)|show(?:ing|n)|positioned)|state))|a(?:i(?:ring(?:con(?:firmation|sent)req|aborted)|nt)|(?:y(?:mentmethod|erdetail)chang|st|us)e|ge(?:hide|show))|u(?:ll(?:vcard(?:listing|entry)|phonebook)req|sh(?:subscriptionchange)?)|(?:[is]|ending|ty)change|ro(?:cessorerror|gress)|lay(?:ing)?|hoto)|c(?:o(?:n(?:nect(?:i(?:on(?:statechanged|available)|ng)|ed)?|t(?:rollerchange|extmenu))|m(?:p(?:osition(?:update|start|end)|lete)|mand(?:update)?)|py)|h(?:a(?:r(?:ging(?:time)?change|acteristicchanged)|nge)|ecking)|a(?:n(?:play(?:through)?|cel)|(?:llschang|ch)ed|rdstatechange)|u(?:rrent(?:channel|source)changed|echange|t)|l(?:i(?:rmodechange|ck)|ose)|fstatechange)|s(?:t(?:a(?:t(?:uschanged|echange)|lled|rt)|o(?:rage(?:areachanged)?|p)|k(?:sessione|comma)nd)|e(?:lect(?:ionchange|start)?|ek(?:ing|ed)|n(?:ding|t)|t)|ou(?:rce(?:(?:clos|end)ed|open)|nd(?:start|end))|c(?:(?:anningstate|ostatus)changed|roll)|pe(?:akerforcedchange|ech(?:start|end))|h(?:ipping(?:address|option)change|ow)|u(?:ccess|spend|bmit))|d(?:e(?:vice(?:p(?:roximity|aired)|(?:orienta|mo)tion|(?:unpaire|foun)d|change|light)|l(?:ivery(?:success|error)|eted))|i(?:s(?:c(?:hargingtimechange|onnect(?:ing|ed)?)|playpasskeyreq|abled)|aling)|r(?:a(?:g(?:e(?:n(?:ter|d)|xit)|(?:gestur|leav)e|start|drop|over)?|in)|op)|ata(?:(?:availabl|chang)e|error)?|urationchange|ownloading|blclick)|a(?:n(?:imation(?:iteration|cancel|start|end)|tennaavailablechange)|d(?:d(?:sourcebuffer|track)|apter(?:remov|add)ed)|ttribute(?:(?:write|read)req|changed)|u(?:dio(?:process|start|end)|xclick)|b(?:solutedeviceorientation|ort)|(?:2dpstatuschang|ppinstall)ed|fter(?:scriptexecute|print)|ctiv(?:estatechanged|ate)|lerting)|r(?:e(?:s(?:ourcetimingbufferfull|u(?:m(?:ing|e)|lt)|ponseprogress|ize|et)|mo(?:ve(?:sourcebuffer|track)?|te(?:resume|hel)d)|ad(?:y(?:statechange)?|success|error)|quest(?:mediaplaystatu|progres)s|(?:jectionhandl|ceiv)ed|pea(?:tEven)?t|loadpage|trieving)|(?:(?:adiost)?ate|t)change|ds(?:dis|en)abled)|Moz(?:S(?:wipeGesture(?:(?:May)?Start|Update|End)?|crolledAreaChanged)|M(?:agnifyGesture(?:Update|Start)?|ouse(?:PixelScroll|Hittest))|EdgeUI(?:C(?:omplet|ancel)|Start)ed|RotateGesture(?:Update|Start)?|(?:Press)?TapGesture|AfterPaint)|w(?:eb(?:kit(?:Animation(?:Iteration|Start|End)|animation(?:iteration|start|end)|(?:TransitionE|transitione)nd)|socket)|a(?:iting(?:forkey)?|rning)|heel)|DOM(?:Node(?:Inserted(?:IntoDocument)?|Removed(?:FromDocument)?)|(?:CharacterData|Subtree)Modified|A(?:ttrModified|ctivate)|Focus(?:Out|In)|MouseScroll)|b(?:e(?:fore(?:(?:evicte|unloa)d|p(?:aste|rint)|scriptexecute|c(?:opy|ut))|gin(?:Event)?)|u(?:fferedamountlow|sy)|oun(?:dary|ce)|l(?:ocked|ur)|roadcast)|v(?:rdisplay(?:(?:presentchang|activat)e|d(?:eactivate|isconnect)|connect)|o(?:ice(?:schanged|change)|lumechange)|(?:isibility|ersion)change)|u(?:p(?:date(?:(?:fou|e)nd|ready|start)?|gradeneeded)|n(?:handledrejection|derflow|load|mute)|s(?:erproximity|sdreceived))|e(?:n(?:ter(?:pincodereq)?|(?:crypt|abl)ed|d(?:Event|ed)?)|m(?:ergencycbmodechange|ptied)|(?:itbroadcas|vic)ted|rror|xit)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|ransition(?:cancel|start|end|run)|ime(?:update|out)|e(?:rminate|xt)|ypechange)|l(?:o(?:ad(?:e(?:d(?:meta)?data|nd)|ing(?:error|done)?|start)?|stpointercapture)|(?:anguage|evel)change)|o(?:(?:(?:rientation|tastatus)chang|(?:ff|n)lin)e|b(?:expasswordreq|solete)|verflow(?:changed)?|pen)|g(?:amepad(?:(?:dis)?connected|button(?:down|up)|axismove)|(?:otpointercaptur|roupchang)e|et)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?|requencychange|(?:inis|etc)h|ailed)|i(?:cc(?:(?:info)?change|(?:un)?detected)|n(?:coming|stall|valid|put))|h(?:(?:fp|id)statuschanged|e(?:adphoneschange|ld)|ashchange|olding)|n(?:o(?:tificationcl(?:ick|ose)|update|match)|ewrdsgroup)|Check(?:KeyPressEventModel|boxStateChange)|SVG(?:(?:Unl|L)oad|Resize|Scroll|Zoom)|key(?:statuseschange|press|down|up)|R(?:adioStateChange|equest)|(?:AppComman|Loa)d|zoom)"
+  const IC_EVENT_PATTERN = "on(?:m(?:o(?:z(?:browser(?:beforekey(?:down|up)|afterkey(?:down|up))|(?:network(?:down|up)loa|accesskeynotfoun)d|showdropdown(?:_sourcetouch)?|pointerlock(?:change|error)|(?:orientation|time)change|fullscreen(?:change|error)|visual(?:resize|scroll)|interrupt(?:begin|end)|key(?:down|up)onplugin)|use(?:l(?:ongtap|eave)|o(?:ver|ut)|enter|wheel|down|move|up))|a(?:p(?:se(?:tmessagestatus|ndmessage)|message(?:slisting|update)|folderlisting|getmessage)req|rk)|e(?:rchantvalidation|ssage(?:error)?)|(?:idimessag|ut)e)|Moz(?:DOM(?:Fullscreen_(?:E(?:xit(?:ed)?|ntered)|NewOrigin|Request)|PointerLock_E(?:nter|xit)ed)|S(?:wipeGesture(?:(?:May)?Start|Update|End)?|(?:essionStorage|crolledArea)Changed)|M(?:agnifyGesture(?:Update|Start)?|ouse(?:PixelScroll|Hittest))|(?:EdgeUI(?:C(?:omplet|ancel)|Start)|LocalStorageChang)ed|(?:T(?:ogglePictureInPic|apGes)|PressTapGes)ture|A(?:pplicationManifes|fterPain)t|RotateGesture(?:Update|Start)?|OpenDateTimePicker|InvalidForm)|p(?:o(?:inter(?:l(?:ock(?:change|error)|eave)|o(?:ver|ut)|cancel|enter|down|move|up)|p(?:up(?:hid(?:den|ing)|show(?:ing|n)|positioned)|state))|a(?:i(?:ring(?:con(?:firmation|sent)req|aborted)|nt)|(?:y(?:mentmethod|erdetail)chang|st|us)e|ge(?:hide|show))|u(?:ll(?:vcard(?:listing|entry)|phonebook)req|sh(?:subscriptionchange)?)|r(?:o(?:cessorerror|gress)|intPreviewUpdate)|(?:[is]|ending|ty)change|lay(?:ing)?|hoto)|DOM(?:(?:C(?:haracterDataModifi|ontentLoad)|Link(?:Chang|Add)|DocElementInsert|InputPasswordAdd|HeadElementPars|SubtreeModifi|PopupBlock|TitleChang)ed|F(?:o(?:rm(?:BeforeSubmit|HasPassword)|cus(?:Out|In))|rameContentLoaded)|Node(?:Inserted(?:IntoDocument)?|Removed(?:FromDocument)?)|M(?:eta(?:Chang|Remov|Add)ed|ouseScroll)|A(?:(?:utoComple|ctiva)te|ttrModified)|Window(?:C(?:reated|lose)|Focus))|c(?:o(?:n(?:nect(?:i(?:on(?:statechanged|available)|ng)|ed)?|t(?:rollerchange|extmenu))|m(?:p(?:osition(?:update|start|end)|lete)|mand(?:update)?)|py)|h(?:a(?:r(?:ging(?:time)?change|acteristicchanged)|nge)|ecking)|a(?:n(?:play(?:through)?|cel)|(?:llschang|ch)ed|rdstatechange)|u(?:rrent(?:channel|source)changed|echange|t)|l(?:i(?:rmodechange|ck)|ose)|fstatechange)|s(?:t(?:a(?:t(?:uschanged|echange)|lled|rt)|o(?:rage(?:areachanged)?|p)|k(?:sessione|comma)nd)|e(?:lect(?:ionchange|start)?|ek(?:ing|ed)|n(?:ding|t)|t)|c(?:(?:anningstate|ostatus)changed|roll(?:end)?)|ou(?:rce(?:(?:clos|end)ed|open)|nd(?:start|end))|pe(?:akerforcedchange|ech(?:start|end))|h(?:ipping(?:address|option)change|ow)|u(?:ccess|spend|bmit))|d(?:e(?:vice(?:p(?:roximity|aired)|(?:orienta|mo)tion|(?:unpaire|foun)d|change|light)|l(?:ivery(?:success|error)|eted))|i(?:s(?:c(?:hargingtimechange|onnect(?:ing|ed)?)|playpasskeyreq|abled)|aling)|r(?:a(?:g(?:e(?:n(?:ter|d)|xit)|(?:gestur|leav)e|start|drop|over)?|in)|op)|ata(?:(?:availabl|chang)e|error)?|urationchange|ownloading|blclick)|a(?:n(?:imation(?:iteration|cancel|start|end)|tennaavailablechange)|d(?:d(?:sourcebuffer|track)|apter(?:remov|add)ed)|ttribute(?:(?:write|read)req|changed)|u(?:dio(?:process|start|end)|xclick)|b(?:solutedeviceorientation|ort)|(?:2dpstatuschang|ppinstall)ed|fter(?:scriptexecute|print)|ctiv(?:estatechanged|ate)|lerting)|r(?:e(?:s(?:ourcetimingbufferfull|u(?:m(?:ing|e)|lt)|ponseprogress|ize|et)|mo(?:ve(?:sourcebuffer|track)?|te(?:resume|hel)d)|ad(?:y(?:statechange)?|success|error)|quest(?:mediaplaystatu|progres)s|(?:jectionhandl|ceiv)ed|pea(?:tEven)?t|loadpage|trieving)|(?:(?:adiost)?ate|t)change|ds(?:dis|en)abled)|b(?:e(?:fore(?:(?:evicte|unloa)d|p(?:aste|rint)|scriptexecute|c(?:opy|ut)|input)|gin(?:Event)?)|u(?:fferedamountlow|sy)|oun(?:dary|ce)|l(?:ocked|ur)|roadcast)|w(?:eb(?:kit(?:Animation(?:Iteration|Start|End)|animation(?:iteration|start|end)|(?:TransitionE|transitione)nd)|socket)|a(?:iting(?:forkey)?|rning)|heel)|v(?:rdisplay(?:(?:presentchang|activat)e|d(?:eactivate|isconnect)|connect)|o(?:ice(?:schanged|change)|lumechange)|(?:isibility|ersion)change)|u(?:p(?:date(?:(?:fou|e)nd|ready|start)?|gradeneeded)|n(?:handledrejection|derflow|load|mute)|s(?:erproximity|sdreceived))|e(?:n(?:ter(?:pincodereq)?|(?:crypt|abl)ed|d(?:Event|ed)?)|m(?:ergencycbmodechange|ptied)|(?:itbroadcas|vic)ted|rror|xit)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|ransition(?:cancel|start|end|run)|ime(?:update|out)|e(?:rminate|xt)|ypechange)|l(?:o(?:ad(?:e(?:d(?:meta)?data|nd)|ing(?:error|done)?|start)?|stpointercapture)|(?:anguage|evel)change)|o(?:(?:(?:rientation|tastatus)chang|(?:ff|n)lin)e|b(?:expasswordreq|solete)|verflow(?:changed)?|pen)|g(?:amepad(?:(?:dis)?connected|button(?:down|up)|axismove)|(?:otpointercaptur|roupchang)e|et)|f(?:o(?:cus(?:out|in)?|rmdata)|ullscreen(?:change|error)|requencychange|(?:inis|etc)h|ailed)|P(?:lugin(?:(?:BindingAttac|Cras)h|(?:Instanti|Outd)at|Remov)ed|rintingError)|U(?:AWidget(?:SetupOrChange|Teardown)|nselectedTabHover_(?:Dis|En)able)|i(?:cc(?:(?:info)?change|(?:un)?detected)|n(?:coming|stall|valid|put))|h(?:(?:fp|id)statuschanged|e(?:adphoneschange|ld)|ashchange|olding)|(?:(?:GloballyAutoplayBlock|ImageContentLoad)e|AppComman|Loa)d|n(?:o(?:tificationcl(?:ick|ose)|update|match)|ewrdsgroup)|Check(?:KeyPressEventModel|boxStateChange)|SVG(?:(?:Unl|L)oad|Resize|Scroll|Zoom)|key(?:statuseschange|press|down|up)|R(?:adioStateChange|equest)|ZoomChangeUsingMouseWheel|(?:Full|Text)ZoomChange|HiddenPlugin|zoom)"
   // autogenerated from Mozilla's source code, see html5_events/html5_events.pl
   ;
   const IC_EVENT_DOS_PATTERN =
@@ -42,10 +43,10 @@ XSS.InjectionChecker = (async () => {
 
     fuzzify: fuzzify,
     syntax: new SyntaxChecker(),
-    _log: function(msg, i) {
+    _log: function(msg, iterations) {
       if (msg) msg = this._printable(msg);
-      if (t) msg += " - TIME: " + (this.timing.elapsed);
-      if (i) msg += " - ITER: " + i;
+      msg = `${msg} - TIME: ${this.timing.elapsed}`;
+      if (iterations) msg = `${msg} - ITER: ${iterations}`;
       debug("[InjectionChecker]", msg);
     },
 
@@ -172,7 +173,7 @@ XSS.InjectionChecker = (async () => {
       const toStringRx = /^function\s*toString\(\)\s*{\s*\[native code\]\s*\}$/;
 
       // optimistic case first, one big JSON block
-      let m = s.match(/{[^]+}|\[[^]*{[^]*}[^]*\]/);
+      let m = s.match(/{[^]+}|\[[^=]*{[^]*}[^]*\]/);
       if (!m) return s;
 
       // semicolon-separated JSON chunks, like on syndication.twitter.com
@@ -200,15 +201,15 @@ XSS.InjectionChecker = (async () => {
         let iterations = 0;
         while (start > -1 && end - start > 1) {
           expr = s.substring(start, end + 1);
+          if (expr === prevExpr) break;
           let before = s.substring(0, start);
           let after = s.substring(end + 1);
-          if (expr === prevExpr) break;
           iterations++;
           if (await this.timing.pause()) {
             this.log(`JSON reduction iterations ${iterations++}, elapsed ${this.timing.elapsed}, expr ${expr}`);
           }
           end = s.lastIndexOf("}", end - 1);
-          if (end === -1) {
+          if (end < start) {
             start = s.indexOf("{", start + 1);
             end = s.lastIndexOf("}");
           }
@@ -293,7 +294,8 @@ XSS.InjectionChecker = (async () => {
     ),
 
     _maybeJSRx: new RegExp(
-      '(?:(?:\\[[^]+\\]|\\.\\D)(?:[^]*\\([^]*\\)|[^*]`[^]+`|[^=]*=[^=][^]*\\S)' +
+      '(?:(?:\\[[^]+\\]|\\.\\D)[^;&/\'"]*(?:/[^]*|)' +
+      '(?:\\([^]*\\)|[^]*`[^]+`|=[^=][^]*\\S)' +
       // double function call
       '|\\([^]*\\([^]*\\)' +
       ')|(?:^|\\W)(?:' + IC_EVAL_PATTERN +
@@ -302,7 +304,7 @@ XSS.InjectionChecker = (async () => {
       ')[^]*[\\n,;:|]|\\b(?:' +
       fuzzify('setter|location|innerHTML|outerHTML') + // eval-like assignments
       ')\\b[^]*=|' +
-      '.' + IC_COMMENT_PATTERN + "src" + IC_COMMENT_PATTERN + '=' +
+      '\\.' + IC_COMMENT_PATTERN + "src" + IC_COMMENT_PATTERN + '=' +
       IC_EVENT_DOS_PATTERN +
       "|\\b" + fuzzify("onerror") + "\\b[^]*=" +
       "|=[s\\\\[ux]?\d{2}" + // escape (unicode/ascii/octal)
@@ -847,11 +849,11 @@ XSS.InjectionChecker = (async () => {
     GlobalsChecker: /https?:\/\/[\S\s]+["'\s\0](?:id|class|data-\w+)[\s\0]*=[\s\0]*("')?\w{3,}(?:[\s\0]|\1|$)|(?:id|class|data-\w+)[\s\0]*=[\s\0]*("')?\w{3,}(?:[\s\0]|\1)[\s\S]*["'\s\0]href[\s\0]*=[\s\0]*(?:"')?https?:\/\//i,
     HTMLChecker: new RegExp("<[^\\w<>]*(?:[^<>\"'\\s]*:)?[^\\w<>]*(?:" + // take in account quirks and namespaces
       fuzzify("script|form|style|svg|marquee|(?:link|object|embed|applet|param|i?frame|base|body|meta|ima?ge?|video|audio|bindings|set|isindex|animate|template") +
-      ")[^>\\w])|['\"\\s\\0/](?:formaction|style|background|src|lowsrc|ping|innerhtml|data-bind|(?:data-)?mv-(?:\\w+[\\w-]*)|" + IC_EVENT_PATTERN +
+      ")[^>\\w])|['\"\\s\\0/](?:style|innerhtml|data-bind|(?:data-)?mv-(?:\\w+[\\w-]*)|" + IC_EVENT_PATTERN +
       ")[\\s\\0]*=|<%[^]+[=(][^]+%>", "i"),
 
     async checkHTML(s) {
-      let links = s.match(/\b(?:href|src|base|(?:form)?action|\w+-\w+)\s*=\s*(?:(["'])[\s\S]*?\1|(?:[^'">][^>\s]*)?[:?\/#][^>\s]*)/ig);
+      let links = s.match(/\b(?:href|(?:low)?src|base|(?:form)?action|background|ping|\w+-\w+)\s*=\s*(?:(["'])[\s\S]*?\1|(?:[^'">][^>\s]*)?[:?\/#][^>\s]*)/ig);
       if (links) {
         for (let l of links) {
           l = l.replace(/[^=]*=\s*/i, '').replace(/[\u0000-\u001f]/g, '');
@@ -1030,7 +1032,7 @@ XSS.InjectionChecker = (async () => {
         return true;
 
       if (s.indexOf("&") !== -1) {
-        let unent = Entities.convertAll(s);
+        let unent = await Entities.convertAll(s);
         if (unent !== s && await this._checkRecursive(unent, depth)) return true;
       }
 
@@ -1049,7 +1051,7 @@ XSS.InjectionChecker = (async () => {
         return true;
 
       if (/[\u0000-\u001f]|&#/.test(unescaped)) {
-        let unent = Entities.convertAll(unescaped.replace(/[\u0000-\u001f]+/g, ''));
+        let unent = await Entities.convertAll(unescaped.replace(/[\u0000-\u001f]+/g, ''));
         if (unescaped != unent && await this._checkRecursive(unent, depth)) {
           this.log("Trash-stripped nested URL match!");
           return true;
@@ -1194,6 +1196,5 @@ XSS.InjectionChecker = (async () => {
     },
 
   };
-  // InjectionChecker.logEnabled = true;
   return InjectionChecker;
 })();

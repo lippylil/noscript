@@ -2,8 +2,19 @@
 BASE="$PWD"
 SRC="$BASE/src"
 BUILD="$BASE/build"
+CHROMIUM="$BASE/chromium"
 MANIFEST_IN="$SRC/manifest.json"
 MANIFEST_OUT="$BUILD/manifest.json"
+
+strip_rc_ver() {
+  MANIFEST="$1"
+  if [ "$2" = "rel" ]; then
+    replace='s/("version":.*)rc\d+/$1/'
+  else
+    replace='s/("version":.*)(\d+)rc(\d+)/{$1 . ($2 == "0" ? "0" : ($2-1) . ".9" . sprintf("%03d", $3))}/e'
+  fi
+  perl -pi.bak -e "$replace" "$MANIFEST" && rm -f "$MANIFEST".bak
+}
 
 VER=$(grep '"version":' "$MANIFEST_IN" | sed -re 's/.*": "(.*?)".*/\1/')
 if [ "$1" == "tag" ]; then
@@ -12,8 +23,7 @@ if [ "$1" == "tag" ]; then
   exit 0
 fi
 if [[ "$1" == "rel" ]]; then
-  perl -pi.bak -e 's/("version":.*)rc\d+/$1/' "$MANIFEST_IN"
-  rm -f "$MANIFEST_IN".bak
+  strip_rc_ver "$MANIFEST_IN" rel
   "$0" && "$0" bump
   exit
 fi
@@ -65,7 +75,8 @@ cp -pR "$SRC" "$BUILD"
 cp -p LICENSE.txt GPL.txt "$BUILD"/
 
 BUILD_CMD="web-ext"
-BUILD_OPTS="build"
+BUILD_OPTS="build --overwrite-dest"
+CHROMIUM_BUILD_OPTS="$BUILD_OPTS"
 
 if [[ $VER == *rc* ]]; then
   sed -re 's/^(\s+)"strict_min_version":.*$/\1"update_url": "https:\/\/secure.informaction.com\/update\/?v='$VER'",\n\0/' \
@@ -85,11 +96,13 @@ if ! grep '"id":' "$MANIFEST_OUT" >/dev/null; then
   exit 1
 fi
 
-for file in "$SRC"/content/*.js; do
-  if grep -P '\/\/\s(REL|DEV)_ONLY' "$file" >/dev/null; then
-    sed -re 's/\s*\/\/\s*(\S.*)\s*\/\/\s*REL_ONLY.*/\1/' -e 's/.*\/\/\s*DEV_ONLY.*//' "$file" > "$BUILD/content/$(basename "$file")"
-  fi
-done
+if [ "$1" != "debug" ]; then
+  for file in "$SRC"/content/*.js; do
+    if grep -P '\/\/\s(REL|DEV)_ONLY' "$file" >/dev/null; then
+      sed -re 's/\s*\/\/\s*(\S.*)\s*\/\/\s*REL_ONLY.*/\1/' -e 's/.*\/\/\s*DEV_ONLY.*//' "$file" > "$BUILD/content/$(basename "$file")"
+    fi
+  done
+fi
 
 echo "Creating $XPI.xpi..."
 mkdir -p "$XPI_DIR"
@@ -102,7 +115,9 @@ else
   WEBEXT_OUT="$XPI_DIR"
 fi
 
-"$BUILD_CMD" $BUILD_OPTS --overwrite-dest --source-dir="$WEBEXT_IN" --artifacts-dir="$WEBEXT_OUT" --ignore-files=test/XSS_test.js
+COMMON_BUILD_OPTS="--ignore-files=test/XSS_test.js"
+
+"$BUILD_CMD" $BUILD_OPTS --source-dir="$WEBEXT_IN" --artifacts-dir="$WEBEXT_OUT" $COMMON_BUILD_OPTS
 SIGNED="$XPI_DIR/noscript_security_suite-$VER-an+fx.xpi"
 if [ -f "$SIGNED" ]; then
   mv "$SIGNED" "$XPI.xpi"
@@ -115,4 +130,13 @@ else
   exit 3
 fi
 echo "Created $XPI.xpi"
-rm -rf "$BUILD"
+ln -fs $XPI.xpi "$BASE/latest.xpi"
+# create chromium pre-release
+rm -rf "$CHROMIUM"
+strip_rc_ver "$MANIFEST_OUT"
+# skip "application" manifest key
+(grep -B1000 '"name": "NoScript"' "$MANIFEST_OUT"; \
+  grep -A2000 '"version":' "$MANIFEST_OUT") > "$MANIFEST_OUT".tmp && \
+  mv "$MANIFEST_OUT.tmp" "$MANIFEST_OUT"
+mv "$BUILD" "$CHROMIUM"
+web-ext $CHROMIUM_BUILD_OPTS --source-dir="$CHROMIUM" --artifacts-dir="$WEBEXT_OUT" $COMMON_BUILD_OPTS

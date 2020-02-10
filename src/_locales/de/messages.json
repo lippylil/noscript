@@ -84,7 +84,7 @@
         "description": ""
     },
     "BlockedObjects": {
-        "message": "Von NoScript blockierte Objekte",
+        "message": "Von NoScript blockierte Objekte",
         "description": ""
     },
     "BookmarkSync": {
@@ -240,7 +240,7 @@
         "description": ""
     },
     "HighContrast": {
-        "message": "Modus mit hohem Kontrast",
+        "message": "Hoher Kontrast",
         "description": ""
     },
     "httpsOnly": {
@@ -749,6 +749,10 @@
     },
     "cap_fetch": {
         "message": "fetch",
+        "description": ""
+    },
+    "cap_ping": {
+        "message": "ping",
         "description": ""
     },
     "cap_other": {

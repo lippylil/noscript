@@ -38,11 +38,15 @@ var UI = (() => {
             UI.xssUserChoices = m.xssUserChoices;
             UI.local = m.local;
             UI.sync = m.sync;
-            if (UI.local && !UI.local.debug) {
-              debug = () => {}; // be quiet!
-            }
+
             if (UI.local) {
+              if (!UI.local.debug) {
+                debug = () => {}; // be quiet!
+              }
               document.documentElement.classList.toggle("tor", !!UI.local.isTorBrowser);
+              if (UI.local.isTorBrowser) {
+                Sites.onionSecure = true;
+              }
             }
             resolve();
             if (UI.onSettings) UI.onSettings();
@@ -162,7 +166,7 @@ var UI = (() => {
         canary.style.display = "none";
         document.body.appendChild(canary);
         UI.highContrast = window.getComputedStyle(canary).backgroundImage === "none";
-        canary.parentNode.removeChild(canary);
+        canary.remove();
       }
       return UI.highContrast;
     }
@@ -300,7 +304,7 @@ var UI = (() => {
           capInput.id = `capability-${capability}-${idSuffix}`
           capLabel.setAttribute("for", capInput.id);
           capInput.value = capability;
-          capInput.title = capLabel.textContent = _(`cap_${capability}`);
+          capInput.title = capLabel.textContent = _(`cap_${capability}`) || capability;
           let clone = capParent.appendChild(cap.cloneNode(true));
           clone.classList.add(capability);
         }
@@ -361,7 +365,7 @@ var UI = (() => {
       this.rowTemplate = this.initRow();
 
       for (let r of this.allSiteRows()) {
-        r.parentNode.removeChild(r);
+        r.remove();
       }
       this.customize(null);
       this.sitesCount = 0;
@@ -631,10 +635,11 @@ var UI = (() => {
         siteMatch = site;
       }
       let secure = Sites.isSecureDomainKey(siteMatch);
+      let isOnion = UI.local.isTorBrowser && hostname && hostname.endsWith(".onion");
       let keyStyle = secure ? "secure"
         : !domain || /^\w+:/.test(siteMatch) ?
-            (url.protocol === "https:" ? "full" : "unsafe")
-          : domain === hostname ? "domain" : "host";
+            (url.protocol === "https:" || isOnion ? "full" : "unsafe")
+          : isOnion ? "secure" : domain === hostname ? "domain" : "host";
 
       let urlContainer = row.querySelector(".url");
       urlContainer.dataset.key = keyStyle;
@@ -760,7 +765,7 @@ var UI = (() => {
         policy.set(site, row.perms);
         for(let r of this.allSiteRows()) {
           if (r !== row && r.siteMatch === site && r.contextMatch === row.contextMatch) {
-            r.parentNode.removeChild(r);
+            r.remove();
           }
         }
         let newRow = this.createSiteRow(site, site, row.perms, row.contextMatch, row.sitesCount);

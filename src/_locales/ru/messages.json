@@ -64,7 +64,7 @@
         "description": ""
     },
     "AutoAllowTopLevel": {
-        "message": "Временно разрешать документы верхнего уровня по умолчанию",
+        "message": "Временно установить «ДОВЕРЕННЫЕ» для сайтов верхнего уровня",
         "description": ""
     },
     "AutoReload": {
@@ -84,7 +84,7 @@
         "description": ""
     },
     "BlockedObjects": {
-        "message": "Заблокированные объекты",
+        "message": "Объекты, заблокированные NoScript’ом",
         "description": ""
     },
     "BookmarkSync": {
@@ -240,7 +240,7 @@
         "description": ""
     },
     "HighContrast": {
-        "message": "Высококонтрастная тема",
+        "message": "Высокий контраст",
         "description": ""
     },
     "httpsOnly": {
@@ -524,7 +524,7 @@
         "description": ""
     },
     "TempTrustPage": {
-        "message": "Установить преднастройку \nВременно ДОВЕРЕННЫЕ \nдля всех элементов страницы",
+        "message": "Установить  «Врем. ДОВЕРЕННЫЕ» \nдля всех элементов страницы",
         "description": ""
     },
     "TempTrustPage_accesskey": {
@@ -596,7 +596,7 @@
         "description": ""
     },
     "WebAddress": {
-        "message": "Адрес веб-сайта:",
+        "message": "Найти или добавить сайт:",
         "description": ""
     },
     "WebAddress_accesskey": {
@@ -749,6 +749,10 @@
     },
     "cap_fetch": {
         "message": "fetch",
+        "description": ""
+    },
+    "cap_ping": {
+        "message": "пинг",
         "description": ""
     },
     "cap_other": {

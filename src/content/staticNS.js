@@ -1,5 +1,5 @@
-'use strict';
 {
+  'use strict';
   let listenersMap = new Map();
   let backlog = new Set();
 
@@ -33,78 +33,123 @@
       backlog.add(eventName);
     },
 
-    async fetchPolicy() {
-        let policy = await Messages.send("fetchChildPolicy", {url: document.URL});
-        if (!policy) {
-          debug(`No answer to fetchChildPolicy message. This should not be happening.`);
-          return false;
+    fetchPolicy() {
+      let url = document.URL;
+      debug(`Fetching policy from document %s, readyState %s`,
+        url, document.readyState
+        , document.documentElement.outerHTML, // DEV_ONLY
+        document.domain, document.baseURI, window.isSecureContext // DEV_ONLY
+      );
+
+      if (!/^(?:file|ftp|https?):/i.test(url)) {
+        if (/^(javascript|about):/.test(url)) {
+          url = document.readyState === "loading"
+          ? document.baseURI
+          : `${window.isSecureContext ? "https" : "http"}://${document.domain}`;
+          debug("Fetching policy for actual URL %s (was %s)", url, document.URL);
         }
-        this.setup(policy.permissions, policy.MARKER, true);
-        return true;
-    },
-
-    setup(permissions, MARKER, fetched = false) {
-      this.config.permissions = permissions;
-
-      // ugly hack: since now we use registerContentScript instead of the
-      // filterRequest dynamic script injection hack, we use a session cookie
-      // to store per-tab information,  erasing it as soon as we see it
-      // (before any content can access it)
-
-      let checkUnrestricted = challenge => sha256(`${MARKER}:${challenge}`);
-
-      if ((this.config.MARKER = MARKER) && permissions) {
-        let cookieRx = new RegExp(`(?:^|;\\s*)(${MARKER}(?:_\\d+){2})=([^;]*)`);
-        let match = document.cookie.match(cookieRx);
-        if (match) {
-          let [cookie, cookieName, cookieValue] = match;
-          // delete cookie NOW
-          document.cookie = `${cookieName}=;expires=${new Date(Date.now() - 31536000000).toGMTString()}`;
+        (async () => {
+          let policy;
           try {
-            this.config.tabInfo = JSON.parse(decodeURIComponent(cookieValue));
+            policy = await Messages.send("fetchChildPolicy", {url, contextUrl: url});
           } catch (e) {
-            error(e);
+            console.error("Error while fetching policy", e);
           }
-        } else if (UA.isMozilla && window !== window.top) {
-          // The cookie hack won't work for non-HTTP subframes (issue #48),
-          // or the cookie might have been deleted in a race condition,
-          // so here we try to check the parent
-          let checkParent = null;
+          if (policy === undefined) {
+            log("Policy was undefined, retrying in 1/2 sec...");
+            setTimeout(() => this.fetchPolicy(), 500);
+            return;
+          }
+          this.setup(policy);
+        })();
+        return;
+      }
+
+      let originalState = document.readyState;
+      let blockedScripts = [];
+      let localPolicyKey, localPolicy;
+      if (UA.isMozilla && /^(?:ftp|file):/.test(url)) {
+
+        localPolicyKey = `ns.policy.${url}|${browser.runtime.getURL("")}`;
+        let localPolicy = sessionStorage.getItem(localPolicyKey);
+        sessionStorage.removeItem(localPolicyKey);
+        if (localPolicy) {
+          debug("Falling back to localPolicy", localPolicy);
           try {
-            checkParent = parent.wrappedJSObject.checkNoScriptUnrestricted;
-          } catch (e) {
-            // may throw a SecurityException for cross-origin wrappedJSObject access
+            this.setup(JSON.parse(localPolicy));
+            return;
+          } catch(e) {
+            error(e, "Could not setup local policy", localPolicy);
           }
-          if (typeof checkParent  === "function") {
+        }
+
+        addEventListener("beforescriptexecute", e => {
+          // safety net for synchronous loads on Firefox
+          if (!this.canScript) {
+            e.preventDefault();
+            let script = e.target;
+            blockedScripts.push(script)
+            log("Some script managed to be inserted in the DOM while fetching policy, blocking it.\n", script);
+          }
+        }, true);
+      }
+
+      let policy = null;
+
+      let setup = policy => {
+        debug("Fetched %o, readyState %s", policy, document.readyState); // DEV_ONLY
+        this.setup(policy);
+        if (this.canScript && blockedScripts.length && originalState === "loading") {
+          log("Running suspended scripts which are permitted by %s policy.", url);
+          // something went wrong, e.g. with session restore.
+          if (url.startsWith("file:") && !localPolicy) {
+            stop();
+            sessionStorage.setItem(localPolicyKey, JSON.stringify(policy));
+            location.reload(false);
+            return;
+          }
+          for (let s of blockedScripts) {
+            // reinsert the script:
+            // just s.cloneNode(true) doesn't work, the script wouldn't run,
+            // let's clone it the hard way...
             try {
-              let challenge = uuid();
-              let unrestricted = checkParent(challenge) === checkUnrestricted(challenge);
-              this.config.tabInfo = {unrestricted, inherited: true};
+              s.replaceWith(document.createRange().createContextualFragment(s.outerHTML));
             } catch (e) {
-              debug("Exception thrown while checking parent unrestricted tab marker. Something fishy going on...")
               error(e);
             }
           }
         }
       }
 
-      if (!this.config.permissions || this.config.tabInfo.unrestricted) {
-        exportFunction(checkUnrestricted, window, {defineAs: "checkNoScriptUnrestricted"});
-        debug("%s is loading unrestricted by user's choice (%o).", document.URL, this.config);
+      for (;;) {
+        try {
+          policy = browser.runtime.sendSyncMessage(
+            {id: "fetchPolicy", url, contextUrl: url}, setup);
+          break;
+        } catch (e) {
+          if (!Messages.isMissingEndpoint(e)) {
+            error(e);
+            break;
+          }
+          error("Background page not ready yet, retrying to fetch policy...")
+        }
+      }
+
+    },
+
+    setup(policy) {
+      debug("%s, %s, %o", document.URL, document.readyState, policy);
+      if (!policy) {
+        policy = {permissions: {capabilities: []}, localFallback: true};
+      }
+      this.policy = policy;
+
+      if (!policy.permissions || policy.unrestricted) {
         this.allows = () => true;
         this.capabilities =  Object.assign(
           new Set(["script"]), { has() { return true; } });
       } else {
-        if (!fetched) {
-          let hostname = window.location.hostname;
-          if (hostname && hostname.startsWith("[")) {
-            // WebExt match patterns don't seem to support IPV6 (Firefox 63)...
-            debug("Ignoring child policy setup parameters for IPV6 address %s, forcing IPC...", hostname);
-            this.fetchPolicy();
-            return;
-          }
-        }
-        let perms = this.config.permissions;
+        let perms = policy.permissions;
         this.capabilities = new Set(perms.capabilities);
         new DocumentCSP(document).apply(this.capabilities, this.embeddingDocument);
       }
@@ -112,7 +157,8 @@
       this.canScript = this.allows("script");
       this.fire("capabilities");
     },
-    config: { permissions: null, tabInfo: {}, MARKER: "" },
+
+    policy: null,
 
     allows(cap) {
       return this.capabilities && this.capabilities.has(cap);

@@ -33,7 +33,12 @@ var RequestGuard = (() => {
         allowed: {},
         blocked: {},
         noscriptFrames: {},
+        origins: new Set(),
       }
+    },
+    hasOrigin(tabId, origin) {
+      let records = this.map.get(tabId);
+      return records && records.origins.has(origin);
     },
     initTab(tabId, records = this.newRecords()) {
       if (tabId < 0) return;
@@ -45,12 +50,7 @@ var RequestGuard = (() => {
       let policyType = policyTypesMap[type] || type;
       let requestKey = Policy.requestKey(url, policyType, documentUrl);
       let map = this.map;
-      let records;
-      if (map.has(tabId)) {
-        records = map.get(tabId);
-      } else {
-        records = this.initTab(tabId);
-      }
+      let records = map.has(tabId) ?  map.get(tabId) : this.initTab(tabId);
       if (what === "noscriptFrame" && type !== "object") {
         let nsf = records.noscriptFrames;
         nsf[frameId] = optValue;
@@ -59,6 +59,9 @@ var RequestGuard = (() => {
           request.type = type = "main_frame";
           Content.reportTo(request, optValue, type);
         }
+      }
+      if (type.endsWith("frame")) {
+        records.origins.add(Sites.origin(url));
       }
       let collection = records[what];
       if (collection) {
@@ -111,6 +114,11 @@ var RequestGuard = (() => {
         : (numAllowed ? "sub" : "no");
       let showBadge = ns.local.showCountBadge && numBlocked > 0;
       let browserAction = browser.browserAction;
+      if (!browserAction.setIcon) { // mobile
+        browserAction.setTitle({tabId, title: `NoScript (${numBlocked})`});
+        return;
+      }
+
       browserAction.setIcon({tabId, path: {64: `/img/ui-${icon}64.png`}});
       browserAction.setBadgeText({tabId, text: showBadge ? numBlocked.toString() : ""});
       browserAction.setBadgeBackgroundColor({tabId, color: [128, 0, 0, 160]});
@@ -119,9 +127,6 @@ var RequestGuard = (() => {
             _("BlockedItems", [numBlocked, numAllowed + numBlocked]) + ` \n${report}`
             : _("NotEnforced")}`
       });
-    },
-    totalize(sum, value) {
-      return sum + value;
     },
     async probe(tabId) {
       if (tabId === undefined) {
@@ -165,15 +170,12 @@ var RequestGuard = (() => {
   }
   browser.tabs.onActivated.addListener(TabStatus.onActivatedTab);
   browser.tabs.onRemoved.addListener(TabStatus.onRemovedTab);
-  if (!("setIcon" in browser.browserAction)) { // unsupported on Android
-    TabStatus._updateTabNow = TabStatus.updateTab = () => {};
-  }
   let messageHandler = {
     async pageshow(message, sender) {
       TabStatus.recordAll(sender.tab.id, message.seen);
       return true;
     },
-    async enable(message, sender) {
+    async blockedObjects(message, sender) {
       let {url, documentUrl, policyType} = message;
       let TAG = `<${policyType.toUpperCase()}>`;
       let origin = Sites.origin(url);
@@ -184,7 +186,8 @@ var RequestGuard = (() => {
       }
       options = [
         {label: _("allowLocal", siteKey), checked: true},
-        {label: _("allowLocal", origin)}
+        {label: _("allowLocal", origin)},
+        {label: _("CollapseBlockedObjects")},
       ];
       let t = u => `${TAG}@${u}`;
       let ret = await Prompts.prompt({
@@ -193,6 +196,9 @@ var RequestGuard = (() => {
         options});
       debug(`Prompt returned %o`);
       if (ret.button !== 0) return;
+      if (ret.option === 2) {
+        return {collapse: "all"};
+      }
       let key = [siteKey, origin][ret.option || 0];
       if (!key) return;
       let {siteMatch, contextMatch, perms} = ns.policy.get(key, documentUrl);
@@ -210,7 +216,7 @@ var RequestGuard = (() => {
         ns.policy.set(key, perms);
         await ns.savePolicy();
       }
-      return true;
+      return {enable: key};
     },
   }
   const Content = {
@@ -222,7 +228,18 @@ var RequestGuard = (() => {
           key: Policy.requestKey(url, type, documentUrl || "", /^(media|object|frame)$/.test(type)),
           type, url, documentUrl, originUrl
       };
-      if (tabId < 0) return;
+      if (tabId < 0) {
+        if (type === "script" && url.startsWith("https://") && documentUrl && documentUrl.startsWith("https://")) {
+          // service worker / importScripts()?
+          let payload = {request, allowed, policyType, serviceWorker: Sites.origin(documentUrl)};
+          let recipient = {frameId: 0};
+          for (let tab of await browser.tabs.query({url: ["http://*/*", "https://*/*"]})) {
+            recipient.tabId = tab.id;
+            Messages.send("seen", payload, recipient);
+          }
+        }
+        return;
+      }
       if (pending) request.initialUrl = pending.initialUrl;
       if (type !== "sub_frame") { // we couldn't deliver it to frameId, since it's generally not loaded yet
         try {
@@ -251,24 +268,54 @@ var RequestGuard = (() => {
     let redirected = pendingRequests.get(requestId);
     let initialUrl = redirected ? redirected.initialUrl : url;
     pendingRequests.set(requestId, {
-      url, redirected,
+      initialUrl, url, redirected,
       onCompleted: new Set(),
     });
     return redirected;
   }
 
+  let normalizeRequest = UA.isMozilla ? () => {} : request => {
+    if ("initiator" in request && !("originUrl" in request)) {
+      request.originUrl = request.initiator;
+      if (request.type !== "main_frame" && !("documentUrl" in request)) {
+        request.documentUrl = request.initiator;
+      }
+    }
+  };
+
+  function intersectCapabilities(perms, request) {
+    let {frameId, frameAncestors, tabId} = request;
+    if (frameId !== 0 && ns.sync.cascadeRestrictions) {
+      let topUrl = frameAncestors && frameAncestors.length
+        && frameAncestors[frameAncestors.length - 1].url;
+      if (!topUrl) {
+        let tab = TabCache.get(tabId);
+        if (tab) topUrl = tab.url;
+      }
+      if (topUrl) {
+        return ns.policy.cascadeRestrictions(perms, topUrl).capabilities;
+      }
+    }
+    return perms.capabilities;
+  }
+
   const ABORT = {cancel: true}, ALLOW = {};
   const listeners = {
     onBeforeRequest(request) {
+      normalizeRequest(request);
       try {
         let redirected = initPendingRequest(request);
         let {policy} = ns;
         let policyType = policyTypesMap[request.type];
         if (policyType) {
-          let {url, originUrl, documentUrl} = request;
+          let {url, originUrl, documentUrl, tabId} = request;
           let isFetch = "fetch" === policyType;
+
           if ((isFetch || "frame" === policyType) &&
-              (((isFetch && !originUrl || url === originUrl) && originUrl === documentUrl
+              (((isFetch && (!originUrl ||
+                browser.runtime.onSyncMessage &&
+                url.includes(browser.runtime.onSyncMessage.ENDPOINT_PREFIX)
+                ) || url === originUrl) && originUrl === documentUrl
                 // some extensions make them both undefined,
                 // see https://github.com/eight04/image-picka/issues/150
               ) ||
@@ -277,13 +324,28 @@ var RequestGuard = (() => {
             // livemark request or similar browser-internal, always allow;
             return ALLOW;
           }
+
           if (/^(?:data|blob):/.test(url)) {
             request._dataUrl = url;
             request.url = url = documentUrl;
           }
-          let allowed = Sites.isInternal(url) ||
-            !ns.isEnforced(request.tabId) ||
-            policy.can(url, policyType, originUrl);
+
+          let allowed = Sites.isInternal(url);
+          if (!allowed) {
+            if (tabId < 0 && documentUrl && documentUrl.startsWith("https://")) {
+              let origin = Sites.origin(documentUrl);
+              allowed = [...ns.unrestrictedTabs]
+                .some(tabId => TabStatus.hasOrigin(tabId, origin));
+            } else {
+              allowed = !ns.isEnforced(tabId);
+            }
+            if (!allowed) {
+              allowed = intersectCapabilities(
+                policy.get(url, documentUrl).perms,
+                request
+              ).has(policyType);
+            }
+          }
           Content.reportTo(request, allowed, policyType);
           if (!allowed) {
             debug(`Blocking ${policyType}`, request);
@@ -297,6 +359,7 @@ var RequestGuard = (() => {
       return ALLOW;
     },
     onHeadersReceived(request) {
+      normalizeRequest(request);
       let result = ALLOW;
       let promises = [];
       // called for main_frame, sub_frame and object
@@ -315,8 +378,7 @@ var RequestGuard = (() => {
         pending = pendingRequests.get(request.requestId);
       }
       pending.headersProcessed = true;
-      let {url, documentUrl, frameAncestors, statusCode, tabId,
-          responseHeaders, type} = request;
+      let {url, documentUrl, tabId, responseHeaders, type} = request;
       let isMainFrame = type === "main_frame";
       try {
         let capabilities;
@@ -326,30 +388,12 @@ var RequestGuard = (() => {
           if (isMainFrame) {
             if (policy.autoAllowTop && perms === policy.DEFAULT) {
               policy.set(Sites.optimalKey(url), perms = policy.TRUSTED.tempTwin);
-              promises.push(ChildPolicies.update(policy));
             }
             capabilities = perms.capabilities;
           } else {
-            capabilities = perms.capabilities;
-            if (frameAncestors && frameAncestors.length > 0 && ns.sync.cascadeRestrictions) {
-              // cascade top document's restrictions to subframes
-              let topUrl = frameAncestors.pop().url;
-              let topPerms = policy.get(topUrl, topUrl).perms;
-              if (topPerms !== perms) {
-                let topCaps = topPerms.capabilities;
-                // intersect capabilities
-                capabilities = new Set([...capabilities].filter(c => topCaps.has(c)));
-              }
-            }
+            capabilities = intersectCapabilities(perms, request);
           }
-        } else {
-          if (isMainFrame || type === "sub_frame") {
-            let unrestricted = ns.unrestrictedTabs.has(tabId) && {unrestricted: true};
-            if (unrestricted) {
-              headersModified = ChildPolicies.addTabInfoCookie(request, unrestricted);
-            }
-          }
-        }
+        } // else unrestricted, either globally or per-tab
         if (isMainFrame && !TabStatus.map.has(tabId)) {
           debug("No TabStatus data yet for noscriptFrame", tabId);
           TabStatus.record(request, "noscriptFrame",
@@ -374,6 +418,7 @@ var RequestGuard = (() => {
       return result;
     },
     onResponseStarted(request) {
+      normalizeRequest(request);
       debug("onResponseStarted", request);
       let {requestId, url, tabId, frameId, type} = request;
       if (type === "main_frame") {
@@ -424,7 +469,7 @@ var RequestGuard = (() => {
       type,
     });
   }
-  async function onViolationReport(request) {
+  function onViolationReport(request) {
     try {
       let decoder = new TextDecoder("UTF-8");
       const report = JSON.parse(decoder.decode(request.requestBody.raw[0].bytes))['csp-report'];
@@ -433,7 +478,7 @@ var RequestGuard = (() => {
       let blockedURI = report['blocked-uri'];
       if (blockedURI && blockedURI !== 'self') {
         let r = fakeRequestFromCSP(report, request);
-        if (r.url === 'inline') r.url = request.documentUrl;
+        if (!/:/.test(r.url)) r.url = request.documentUrl;
         Content.reportTo(r, false, policyTypesMap[r.type]);
         TabStatus.record(r, "blocked");
       } else if (report["violated-directive"] === "script-src" && /; script-src 'none'/.test(report["original-policy"])) {
